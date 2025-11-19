@@ -1264,45 +1264,44 @@
 
       /* Positionen im Rechnungsdialog */
       function createInvoicePositionRow(defaultItem, defaultPrice) {
-        const row = document.createElement("div");
-        row.className = "invoice-pos-row";
+  const row = document.createElement("div");
+  row.className = "invoice-pos-row";
 
-        const options = items.map(it => {
-          const label = (it.name || "") + (it.articleNumber ? " (" + it.articleNumber + ")" : "");
-          return `<option value="${it.id}">${escapeHtml(label)}</option>`;
-        }).join("");
+  const options = items
+    .map(it => `<option value="${it.id}">${escapeHtml(it.name)}</option>`)
+    .join("");
 
-        const unit = typeof defaultPrice === "number" ? defaultPrice : 0;
+  row.innerHTML = `
+    <div style="flex:2; display:flex; flex-direction:column;">
+      <label style="font-size:10px;">Artikel</label>
+      <select class="inv-pos-item">${options}</select>
+    </div>
 
-        row.innerHTML = `
-  <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
-      <select class="inv-pos-item" style="width:100%;">
-        <option value="">Artikel wählen …</option>
-        ${options}
-      </select>
-      <input type="number" class="inv-pos-unit" step="0.01" min="0" value="${unit.toFixed(2)}" placeholder="Preis pro Stück" style="width:100%;">
-  </div>
+    <div style="width:90px; display:flex; flex-direction:column;">
+      <label style="font-size:10px;">Menge</label>
+      <input type="number" class="inv-pos-qty" min="1" value="1">
+    </div>
 
-  <div style="display:flex;flex-direction:column;gap:4px;width:70px;">
-      <input type="number" class="inv-pos-qty" min="1" value="1" placeholder="Menge" style="width:100%;">
+    <div style="width:120px; display:flex; flex-direction:column;">
+      <label style="font-size:10px;">Preis/Stk</label>
+      <input type="number" class="inv-pos-unit" step="0.01" min="0" value="0">
+    </div>
+
+    <div style="width:40px; display:flex; align-items:end;">
       <button type="button" class="icon-btn danger inv-pos-remove">🗑️</button>
-  </div>
-`;
+    </div>
+  `;
 
-        const selectEl = row.querySelector(".inv-pos-item");
-        const removeBtn = row.querySelector(".inv-pos-remove");
+  const select = row.querySelector(".inv-pos-item");
+  if (defaultItem) select.value = defaultItem.id;
 
-        if (defaultItem && defaultItem.id) {
-          selectEl.value = defaultItem.id;
-        }
+  const priceInput = row.querySelector(".inv-pos-unit");
+  priceInput.value = (typeof defaultPrice === "number" ? defaultPrice : 0).toFixed(2);
 
-        removeBtn.onclick = () => {
-          row.remove();
-        };
+  row.querySelector(".inv-pos-remove").onclick = () => row.remove();
 
-        invoicePositionsContainer.appendChild(row);
-      }
-
+  invoicePositionsContainer.appendChild(row);
+}
       /* Rechnungen: Dialog öffnen */
       function openInvoiceDialogForItem(item) {
         currentInvoiceItemId = item.id;
