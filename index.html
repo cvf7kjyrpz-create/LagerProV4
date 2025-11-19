@@ -985,20 +985,26 @@
         if (!inv) return;
 
         switch (action) {
-          case "view":
-            openInvoicePreview(inv, false);
-            break;
-          case "delete":
-            if (confirm("Diese Rechnung wirklich löschen?")) {
-              invoices = invoices.filter(r => r.id !== id);
-              saveInvoices();
-              renderInvoices();
-            }
-            break;
-          case "cancel":
-            handleCancelInvoice(inv);
-            break;
-        }
+  case "photos":
+    showInvoicePhotos(inv);
+    break;
+
+  case "view":
+    openInvoicePreview(inv, false);
+    break;
+
+  case "cancel":
+    handleCancelInvoice(inv);
+    break;
+
+  case "delete":
+    if (confirm("Diese Rechnung wirklich löschen?")) {
+      invoices = invoices.filter(r => r.id !== id);
+      saveInvoices();
+      renderInvoices();
+    }
+    break;
+}
       });
 
       /* Firmendaten-Button */
