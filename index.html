@@ -1213,14 +1213,13 @@
                 : '<span class="text-muted">–</span>'}
             </td>
             <td>
-              <div class="actions-cell">
-                <button class="icon-btn" data-action="flag" data-id="${item.id}" title="Markieren">⭐</button>
-                <button class="icon-btn" data-action="edit" data-id="${item.id}" title="Bearbeiten">✏️</button>
-                <button class="icon-btn" data-action="photo" data-id="${item.id}" title="Foto anzeigen" ${item.photoDataUrl ? "" : "disabled"}>📷</button>
-                <button class="icon-btn" data-action="invoice" data-id="${item.id}" title="Rechnung aus diesem Artikel erstellen">🧾</button>
-                <button class="icon-btn danger" data-action="delete" data-id="${item.id}" title="Löschen">🗑️</button>
-              </div>
-            </td>
+  <div class="actions-cell">
+    <button class="icon-btn" data-action="photos" data-id="${inv.id}" title="Bilder ansehen">📷</button>
+    <button class="icon-btn" data-action="view" data-id="${inv.id}" title="Rechnung anzeigen">🧾</button>
+    <button class="icon-btn" data-action="cancel" data-id="${inv.id}" ${inv.cancelled ? "disabled" : ""}>↩️</button>
+    <button class="icon-btn danger" data-action="delete" data-id="${inv.id}">🗑️</button>
+  </div>
+</td>
           `;
           tbody.appendChild(tr);
         }
