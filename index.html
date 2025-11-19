@@ -1267,9 +1267,18 @@
         const quantity = Math.max(1, Number(document.getElementById("invQuantity").value || 1));
         const salePrice = Number(document.getElementById("invSalePrice").value || 0);
         const saleDate = document.getElementById("invSaleDate").value || new Date().toISOString().slice(0,10);
-        const buyerName = document.getElementById("invBuyerName").value.trim();
-        const buyerAddress = document.getElementById("invBuyerAddress").value.trim();
-        const buyerCity = document.getElementById("invBuyerCity").value.trim();
+        const buyerFull = document.getElementById("invBuyerFull").value.trim();
+
+// Käuferdaten automatisch sauber splitten
+let buyerName = "";
+let buyerAddress = "";
+let buyerCity = "";
+
+const lines = buyerFull.split("\n").map(l => l.trim()).filter(l => l.length);
+
+if (lines.length >= 1) buyerName = lines[0];
+if (lines.length >= 2) buyerAddress = lines[1];
+if (lines.length >= 3) buyerCity = lines[2];
         const platform = document.getElementById("invPlatform").value.trim();
         const paymentMethod = document.getElementById("invPaymentMethod").value.trim();
 
