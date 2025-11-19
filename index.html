@@ -1609,7 +1609,76 @@
 
       /* Rechnungsansicht / Drucken */
       function openInvoicePreview(inv, autoPrint) {
+  function showInvoicePhotos(inv) {
   const win = window.open("", "_blank");
+  if (!win) return;
+
+  // Alle Bilder aus allen Positionen einsammeln
+  const photoList = [];
+
+  if (Array.isArray(inv.positions)) {
+    inv.positions.forEach(pos => {
+      const item = items.find(i => i.id === pos.itemId);
+      if (item && item.photoDataUrl) {
+        photoList.push({
+          name: item.name,
+          img: item.photoDataUrl
+        });
+      }
+    });
+  }
+
+  if (photoList.length === 0) {
+    win.document.write("<p style='font-family:sans-serif;padding:20px;'>Keine Fotos für diese Rechnung gefunden.</p>");
+    return;
+  }
+
+  win.document.write(`
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Bilder zur Rechnung ${inv.number}</title>
+      <style>
+        body {
+          font-family: system-ui,sans-serif;
+          padding: 20px;
+        }
+        .imgbox {
+          margin-bottom: 20px;
+        }
+        img {
+          max-width: 95%;
+          height: auto;
+          border: 1px solid #666;
+          border-radius: 6px;
+        }
+        button {
+          margin-bottom: 15px;
+          padding: 6px 12px;
+          font-size: 10pt;
+        }
+      </style>
+    </head>
+    <body>
+      <button onclick="window.close()">Zurück</button>
+  `);
+
+  photoList.forEach(p => {
+    win.document.write(`
+      <div class="imgbox">
+        <h3>${p.name}</h3>
+        <a download="${p.name}.jpg" href="${p.img}">
+          <img src="${p.img}">
+        </a>
+        <p>Zum Speichern einfach aufs Bild tippen (iPhone: gedrückt halten → „In Fotos sichern“)</p>
+      </div>
+    `);
+  });
+
+  win.document.write(`</body></html>`);
+  win.document.close();
+}
+        const win = window.open("", "_blank");
   if (!win) return;
 
   const revenue = Number(inv.salePrice || 0);
