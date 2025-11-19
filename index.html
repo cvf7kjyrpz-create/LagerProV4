@@ -347,6 +347,20 @@
       color:var(--danger);
     }
 
+    /* Mehrpositionen in Rechnung-Dialog */
+    .invoice-pos-row{
+      display:flex;
+      gap:0.3rem;
+      align-items:center;
+      margin-top:0.25rem;
+    }
+    .invoice-pos-row select{
+      flex:2;
+    }
+    .invoice-pos-row input{
+      flex:0.8;
+    }
+
     @media(max-width:800px){
       .app-shell{padding:0.7rem;}
       .header-top{flex-direction:column;align-items:flex-start;}
@@ -438,7 +452,6 @@
         <div class="pill">Kleinunternehmer · kein MwSt-Ausweis</div>
       </div>
 
-      <!-- Navigation Lager / Rechnungen -->
       <div class="nav-bar">
         <button class="nav-btn active" id="navLager">Lager</button>
         <button class="nav-btn" id="navRechnungen">Rechnungen</button>
@@ -456,10 +469,10 @@
           Gesamtmenge: <b id="statQty">0</b>
         </div>
         <div class="stat-chip">
-          Lagerwert aktuell: <b id="statCurrentValue">0,00 €</b>
+          Lagerwert aktuell: <b id="statTotal">0,00 €</b>
         </div>
         <div class="stat-chip">
-          Insgesamt investiert: <b id="statInvested">0,00 €</b>
+          Lagerwert gesamt: <b id="statTotalEver">0,00 €</b>
         </div>
       </div>
 
@@ -661,20 +674,12 @@
   <dialog id="invoiceDialog">
     <h3 class="dialog-title">Rechnung aus Artikel erstellen</h3>
     <form id="invoiceForm" class="form-grid" onsubmit="return false;">
-      <label class="full-width">
-        Artikel
-        <input id="invItemName" readonly>
-      </label>
 
-      <label>
-        Menge
-        <input id="invQuantity" type="number" min="1" value="1">
-      </label>
-
-      <label>
-        Einzelpreis (€)
-        <input id="invUnitPrice" type="number" step="0.01" min="0" value="0">
-      </label>
+      <div class="full-width">
+        <span class="small-hint">Positionen (Menge + Einzelpreis, Artikel aus Lager)</span>
+        <div id="invoicePositions"></div>
+        <button type="button" class="icon-btn" id="btnAddPosition">＋ Position</button>
+      </div>
 
       <label>
         Verkaufsdatum
@@ -767,14 +772,11 @@
       let tempPhotoDataUrl = null;
       let currentInvoiceItemId = null;
 
-      // Standard-Firmendaten
       let firmData = {
         name:"OneByOneFashion",
         street:"",
         zipCity:"98683 Ilmenau",
         country:"Deutschland",
-        email:"OneByOneFashion@myyahoo.com",
-        ustId:"DE359019064",
         paymentText:
           "Der Rechnungsbetrag wurde bereits über das System von Vinted beglichen.\n" +
           "Es liegt aufgrund des Kleinunternehmerstatus nach § 19 UStG eine Umsatzsteuerbefreiung vor.\n" +
@@ -792,6 +794,8 @@
 
       const invoiceDialog = document.getElementById("invoiceDialog");
       const invoiceForm = document.getElementById("invoiceForm");
+      const invoicePositionsContainer = document.getElementById("invoicePositions");
+      const btnAddPosition = document.getElementById("btnAddPosition");
 
       const photoDialog = document.getElementById("photoDialog");
       const photoDialogImg = document.getElementById("photoDialogImg");
@@ -803,8 +807,8 @@
 
       const statCount = document.getElementById("statCount");
       const statQty = document.getElementById("statQty");
-      const statCurrentValue = document.getElementById("statCurrentValue");
-      const statInvested = document.getElementById("statInvested");
+      const statTotal = document.getElementById("statTotal");
+      const statTotalEver = document.getElementById("statTotalEver");
 
       const invoiceTotalRevenueEl = document.getElementById("invoiceTotalRevenue");
       const invoiceTotalProfitEl = document.getElementById("invoiceTotalProfit");
@@ -957,12 +961,13 @@
         render();
       });
 
-      /* Rechnungs-Dialog Buttons */
+      /* Rechnungs-Dialog */
       document.getElementById("btnCancelInvoice").onclick = () => {
         invoiceDialog.close();
         currentInvoiceItemId = null;
       };
       document.getElementById("btnSaveInvoice").onclick = () => saveInvoice();
+      btnAddPosition.onclick = () => createInvoicePositionRow(null, null);
 
       /* Suche Rechnungen */
       document.getElementById("invoiceSearch").oninput = () => renderInvoices();
@@ -982,9 +987,6 @@
         switch (action) {
           case "view":
             openInvoicePreview(inv, false);
-            break;
-          case "print":
-            openInvoicePreview(inv, true);
             break;
           case "delete":
             if (confirm("Diese Rechnung wirklich löschen?")) {
@@ -1133,6 +1135,7 @@
         setValue("firmEmail", firmData.email || "");
         document.getElementById("firmPaymentText").value = firmData.paymentText || "";
         document.getElementById("firmFooterText").value = firmData.footerText || "";
+
         firmDialog.showModal();
       }
 
@@ -1228,74 +1231,141 @@
       function updateStats() {
         const count = items.length;
         const totalQty = items.reduce((sum, i) => sum + Number(i.quantity || 0), 0);
-        const currentValue = items.reduce((sum, i) => {
+        const currentStockValue = items.reduce((sum, i) => {
           const qty = Number(i.quantity || 0);
           const price = Number(i.price || 0);
           return sum + qty * price;
         }, 0);
 
-        // Nur nicht stornierte Rechnungen zählen
+        // Einkaufskosten aller verkauften, nicht stornierten Artikel
         const activeInvoices = invoices.filter(inv => !inv.cancelled);
         const soldCost = activeInvoices.reduce((sum, inv) => {
-          const q = Number(inv.quantity || 0);
-          const up = Number(inv.unitPurchasePrice || 0);
-          return sum + q * up;
+          if (Array.isArray(inv.positions) && inv.positions.length) {
+            return sum + inv.positions.reduce((s,p) => s + Number(p.lineCost || (p.unitPurchasePrice || 0) * (p.quantity || 0)), 0);
+          } else {
+            const qty = Number(inv.quantity || 0);
+            const unitPurchase = Number(inv.unitPurchasePrice || 0);
+            return sum + qty * unitPurchase;
+          }
         }, 0);
 
-        const totalInvested = currentValue + soldCost;
+        const totalEver = currentStockValue + soldCost;
 
         statCount.textContent = count;
         statQty.textContent = totalQty;
-        statCurrentValue.textContent = currentValue.toFixed(2).replace(".", ",") + " €";
-        statInvested.textContent = totalInvested.toFixed(2).replace(".", ",") + " €";
+        statTotal.textContent = currentStockValue.toFixed(2).replace(".", ",") + " €";
+        statTotalEver.textContent = totalEver.toFixed(2).replace(".", ",") + " €";
+      }
+
+      /* Positionen im Rechnungsdialog */
+      function createInvoicePositionRow(defaultItem, defaultPrice) {
+        const row = document.createElement("div");
+        row.className = "invoice-pos-row";
+
+        const options = items.map(it => {
+          const label = (it.name || "") + (it.articleNumber ? " (" + it.articleNumber + ")" : "");
+          return `<option value="${it.id}">${escapeHtml(label)}</option>`;
+        }).join("");
+
+        const unit = typeof defaultPrice === "number" ? defaultPrice : 0;
+
+        row.innerHTML = `
+          <select class="inv-pos-item">
+            <option value="">Artikel wählen …</option>
+            ${options}
+          </select>
+          <input type="number" class="inv-pos-qty" min="1" value="1">
+          <input type="number" class="inv-pos-unit" step="0.01" min="0" value="${unit.toFixed(2)}" placeholder="Preis/Stk">
+          <button type="button" class="icon-btn danger inv-pos-remove" title="Position entfernen">🗑️</button>
+        `;
+
+        const selectEl = row.querySelector(".inv-pos-item");
+        const removeBtn = row.querySelector(".inv-pos-remove");
+
+        if (defaultItem && defaultItem.id) {
+          selectEl.value = defaultItem.id;
+        }
+
+        removeBtn.onclick = () => {
+          row.remove();
+        };
+
+        invoicePositionsContainer.appendChild(row);
       }
 
       /* Rechnungen: Dialog öffnen */
       function openInvoiceDialogForItem(item) {
         currentInvoiceItemId = item.id;
         invoiceForm.reset();
-        document.getElementById("invItemName").value = item.name || "";
-        document.getElementById("invQuantity").value = 1;
-        document.getElementById("invUnitPrice").value = (item.price || 0).toFixed(2);
+        invoicePositionsContainer.innerHTML = "";
+
+        // Erste Position mit dem gewählten Artikel vorbelegen
+        createInvoicePositionRow(item, Number(item.price || 0));
 
         const today = new Date().toISOString().slice(0,10);
         document.getElementById("invSaleDate").value = today;
+        document.getElementById("invBuyerFull").value = "";
 
         invoiceDialog.showModal();
       }
 
       /* Rechnungen: Speichern */
       function saveInvoice() {
-        if (!currentInvoiceItemId) {
-          alert("Kein Artikel ausgewählt.");
-          return;
-        }
-        const item = items.find(i => i.id === currentInvoiceItemId);
-        if (!item) {
-          alert("Artikel nicht gefunden.");
-          return;
-        }
-
-        const quantity = Math.max(1, Number(document.getElementById("invQuantity").value || 1));
-        const unitPrice = Number(document.getElementById("invUnitPrice").value || 0);
-        const salePrice = unitPrice * quantity; // du gibst Einzelpreis an, wir rechnen Gesamt
         const saleDate = document.getElementById("invSaleDate").value || new Date().toISOString().slice(0,10);
         const buyerFull = document.getElementById("invBuyerFull").value.trim();
         const platform = document.getElementById("invPlatform").value.trim();
         const paymentMethod = document.getElementById("invPaymentMethod").value.trim();
 
-        if (!unitPrice || unitPrice <= 0) {
-          alert("Bitte einen Einzelpreis eingeben.");
-          return;
-        }
-
-        // Käuferdaten grob splitten (1. Zeile Name, 2. Zeile Straße, 3. Zeile Stadt)
-        let buyerName = "", buyerAddress = "", buyerCity = "";
+        // Käufer in Name/Adresse/Ort aufsplitten (intern), aber alles bleibt in buyerFull
+        let buyerName = "";
+        let buyerAddress = "";
+        let buyerCity = "";
         if (buyerFull) {
           const lines = buyerFull.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
           buyerName = lines[0] || "";
           buyerAddress = lines[1] || "";
-          buyerCity = lines[2] || "";
+          buyerCity = lines.slice(2).join(", ");
+        }
+
+        // Positionen einsammeln
+        const rows = invoicePositionsContainer.querySelectorAll(".invoice-pos-row");
+        const positions = [];
+        const itemQtyMap = new Map();
+
+        rows.forEach(row => {
+          const itemId = row.querySelector(".inv-pos-item").value;
+          const qty = Number(row.querySelector(".inv-pos-qty").value || 0);
+          const unitSale = Number(row.querySelector(".inv-pos-unit").value || 0);
+
+          if (!itemId || qty <= 0 || unitSale <= 0) return;
+
+          const it = items.find(i => i.id === itemId);
+          const articleName = it?.name || "";
+          const articleNumber = it?.articleNumber || "";
+          const unitPurchase = Number(it?.price || 0);
+
+          const lineTotal = qty * unitSale;
+          const lineCost = qty * unitPurchase;
+          const lineProfit = lineTotal - lineCost;
+
+          positions.push({
+            itemId,
+            articleName,
+            articleNumber,
+            quantity: qty,
+            unitSalePrice: unitSale,
+            lineTotal,
+            unitPurchasePrice: unitPurchase,
+            lineCost,
+            lineProfit
+          });
+
+          itemQtyMap.set(itemId, (itemQtyMap.get(itemId) || 0) + qty);
+        });
+
+        if (!positions.length) {
+          alert("Bitte mindestens eine Position mit Artikel, Menge und Preis/Stk eingeben.");
+          return;
         }
 
         // Rechnungsnummer
@@ -1306,9 +1376,9 @@
         counter += 1;
         localStorage.setItem(INVOICE_COUNTER_KEY, String(counter));
 
-        const purchasePrice = Number(item.price || 0);
-        const cost = purchasePrice * quantity;
-        const profit = salePrice - cost;
+        const totalRevenue = positions.reduce((sum, p) => sum + Number(p.lineTotal || 0), 0);
+        const totalProfit = positions.reduce((sum, p) => sum + Number(p.lineProfit || 0), 0);
+        const totalCost = positions.reduce((sum, p) => sum + Number(p.lineCost || 0), 0);
 
         const invoice = {
           id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
@@ -1321,23 +1391,34 @@
           buyerCity,
           platform,
           paymentMethod,
-          quantity,
-          unitPrice,
-          salePrice,
-          profit,
-          articleId: item.id,
-          articleName: item.name || "",
-          articleNumber: item.articleNumber || "",
-          unitPurchasePrice: purchasePrice,
+          positions,
+          salePrice: totalRevenue,
+          profit: totalProfit,
+          totalCost,
           cancelled: false
         };
+
+        // erste Position zusätzlich in alte Felder für Abwärtskompatibilität
+        const first = positions[0];
+        if (first) {
+          invoice.articleId = first.itemId;
+          invoice.articleName = first.articleName;
+          invoice.articleNumber = first.articleNumber;
+          invoice.quantity = first.quantity;
+          invoice.unitPurchasePrice = first.unitPurchasePrice;
+        }
 
         invoices.push(invoice);
         saveInvoices();
 
-        // Lagerbestand reduzieren
-        const currentQty = Number(item.quantity || 0);
-        item.quantity = Math.max(0, currentQty - quantity);
+        // Lagerbestand pro Artikel reduzieren
+        itemQtyMap.forEach((qty, itemId) => {
+          const it = items.find(i => i.id === itemId);
+          if (it) {
+            const currentQty = Number(it.quantity || 0);
+            it.quantity = Math.max(0, currentQty - qty);
+          }
+        });
         saveItems();
 
         render();
@@ -1359,30 +1440,56 @@
           return;
         }
 
-        const qty = Number(inv.quantity || 0);
-        const unitPurchase = Number(inv.unitPurchasePrice || 0);
-
-        // Lager wieder auffüllen
-        let item = items.find(i => i.id === inv.articleId);
-        if (item) {
-          const currentQty = Number(item.quantity || 0);
-          item.quantity = currentQty + qty;
+        // Lager wieder auffüllen nach Positionen
+        if (Array.isArray(inv.positions) && inv.positions.length) {
+          inv.positions.forEach(p => {
+            const item = items.find(i => i.id === p.itemId);
+            const qty = Number(p.quantity || 0);
+            const unitPurchase = Number(p.unitPurchasePrice || 0);
+            if (item) {
+              const currentQty = Number(item.quantity || 0);
+              item.quantity = currentQty + qty;
+            } else if (qty > 0) {
+              const newItem = {
+                id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+                articleNumber: p.articleNumber || "",
+                purchaseDate: "",
+                name: p.articleName || "",
+                condition: "",
+                size: "",
+                store: "",
+                quantity: qty,
+                price: unitPurchase,
+                note: "Automatisch durch Storno wieder angelegt",
+                flagged: false
+              };
+              items.push(newItem);
+            }
+          });
         } else {
-          // Artikel existiert nicht mehr -> neu anlegen
-          item = {
-            id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
-            articleNumber: inv.articleNumber || "",
-            purchaseDate: "",
-            name: inv.articleName || "",
-            condition: "",
-            size: "",
-            store: "",
-            quantity: qty,
-            price: unitPurchase,
-            note: "Automatisch durch Storno wieder angelegt",
-            flagged: false
-          };
-          items.push(item);
+          // Alte Einzelposition-Logik
+          const qty = Number(inv.quantity || 0);
+          const unitPurchase = Number(inv.unitPurchasePrice || 0);
+          let item = items.find(i => i.id === inv.articleId);
+          if (item) {
+            const currentQty = Number(item.quantity || 0);
+            item.quantity = currentQty + qty;
+          } else if (qty > 0) {
+            item = {
+              id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+              articleNumber: inv.articleNumber || "",
+              purchaseDate: "",
+              name: inv.articleName || "",
+              condition: "",
+              size: "",
+              store: "",
+              quantity: qty,
+              price: unitPurchase,
+              note: "Automatisch durch Storno wieder angelegt",
+              flagged: false
+            };
+            items.push(item);
+          }
         }
 
         // Rechnung als storniert markieren
@@ -1401,20 +1508,26 @@
 
         const search = document.getElementById("invoiceSearch").value.toLowerCase();
 
-        const filtered = invoices.slice().sort((a,b) => (b.number || 0) - (a.number || 0)).filter(inv => {
-          if (!search) return true;
-          const hay = `
-            ${inv.number || ""}
-            ${inv.saleDate || ""}
-            ${inv.buyerName || ""}
-            ${inv.buyerCity || ""}
-            ${inv.articleName || ""}
-            ${inv.articleNumber || ""}
-            ${inv.platform || ""}
-            ${inv.paymentMethod || ""}
-          `.toLowerCase();
-          return hay.includes(search);
-        });
+        const filtered = invoices
+          .slice()
+          .sort((a,b) => (b.number || 0) - (a.number || 0))
+          .filter(inv => {
+            if (!search) return true;
+            const firstPosName = Array.isArray(inv.positions) && inv.positions.length
+              ? inv.positions[0].articleName || ""
+              : inv.articleName || "";
+
+            const hay = `
+              ${inv.number || ""}
+              ${inv.saleDate || ""}
+              ${inv.buyerName || ""}
+              ${inv.buyerCity || ""}
+              ${firstPosName}
+              ${inv.platform || ""}
+              ${inv.paymentMethod || ""}
+            `.toLowerCase();
+            return hay.includes(search);
+          });
 
         if (!filtered.length) {
           const tr = document.createElement("tr");
@@ -1431,24 +1544,39 @@
           const revenue = Number(inv.salePrice || 0);
           const profit = Number(inv.profit || 0);
 
+          // Artikel-Anzeige: erster Artikel + Hinweis auf weitere
+          let articleText = "";
+          let totalQty = 0;
+          if (Array.isArray(inv.positions) && inv.positions.length) {
+            const first = inv.positions[0];
+            articleText = escapeHtml(first.articleName || "");
+            if (inv.positions.length > 1) {
+              articleText += ` (+${inv.positions.length - 1} weitere)`;
+            }
+            totalQty = inv.positions.reduce((s,p) => s + Number(p.quantity || 0), 0);
+          } else {
+            articleText = escapeHtml(inv.articleName || "");
+            totalQty = Number(inv.quantity || 0);
+          }
+
+          const customerName = inv.buyerName || "";
           const customerCell = inv.cancelled
-            ? `<div>${escapeHtml(inv.buyerName || "")}</div><div class="storno-label">❌ Storniert</div>`
-            : escapeHtml(inv.buyerName || "");
+            ? `<div>${escapeHtml(customerName)}</div><div class="storno-label">❌ Storniert</div>`
+            : escapeHtml(customerName);
 
           tr.innerHTML = `
             <td>${inv.number || ""}</td>
             <td>${escapeHtml(inv.saleDate || "")}</td>
             <td>${customerCell}</td>
-            <td>${escapeHtml(inv.articleName || "")}</td>
-            <td>${inv.quantity || 0}</td>
+            <td>${articleText}</td>
+            <td>${totalQty}</td>
             <td>${revenue.toFixed(2).replace(".", ",")}</td>
             <td>${profit.toFixed(2).replace(".", ",")}</td>
             <td>${escapeHtml(inv.platform || "")}</td>
             <td>${escapeHtml(inv.paymentMethod || "")}</td>
             <td>
               <div class="actions-cell">
-                <button class="icon-btn" data-action="view" data-id="${inv.id}" title="Ansehen">🔍</button>
-                <button class="icon-btn" data-action="print" data-id="${inv.id}" title="Drucken / PDF">🖨️</button>
+                <button class="icon-btn" data-action="view" data-id="${inv.id}" title="Rechnung anzeigen / speichern">📷</button>
                 <button class="icon-btn" data-action="cancel" data-id="${inv.id}" title="Stornieren / Lager rückbuchen" ${inv.cancelled ? "disabled" : ""}>↩️</button>
                 <button class="icon-btn danger" data-action="delete" data-id="${inv.id}" title="Löschen">🗑️</button>
               </div>
@@ -1462,21 +1590,19 @@
 
       function updateInvoiceStats() {
         const activeInvoices = invoices.filter(inv => !inv.cancelled);
+
         const totalRevenue = activeInvoices.reduce((sum, inv) => sum + Number(inv.salePrice || 0), 0);
         const totalProfit = activeInvoices.reduce((sum, inv) => sum + Number(inv.profit || 0), 0);
         invoiceTotalRevenueEl.textContent = totalRevenue.toFixed(2).replace(".", ",") + " €";
         invoiceTotalProfitEl.textContent = totalProfit.toFixed(2).replace(".", ",") + " €";
-        updateStats();
       }
 
-      /* Rechnungsansicht / Drucken – neues Layout + Toolbar */
+      /* Rechnungsansicht / Drucken */
       function openInvoicePreview(inv, autoPrint) {
         const win = window.open("", "_blank");
         if (!win) return;
 
         const revenue = Number(inv.salePrice || 0);
-        const qty = Number(inv.quantity || 0);
-        const unitPrice = qty ? revenue / qty : revenue;
 
         const firmName = escapeHtml(firmData.name || "");
         const firmStreet = escapeHtml(firmData.street || "");
@@ -1487,24 +1613,59 @@
         const paymentTextHtml = (firmData.paymentText || "").split("\n").map(ln => escapeHtml(ln)).join("<br>");
         const footerTextHtml = escapeHtml(firmData.footerText || "");
 
-        const buyerFull = inv.buyerFull
-          ? inv.buyerFull
-          : [inv.buyerName, inv.buyerAddress, inv.buyerCity].filter(Boolean).join("\n");
-        const buyerFullHtml = buyerFull.split("\n").map(ln => escapeHtml(ln)).join("<br>");
-
-        const articleName = escapeHtml(inv.articleName || "");
-        const articleNumber = escapeHtml(inv.articleNumber || "");
+        const buyerFull = inv.buyerFull || "";
+        let buyerBlock = "";
+        if (buyerFull) {
+          buyerBlock = buyerFull.split(/\r?\n/).map(ln => escapeHtml(ln)).join("<br>");
+        } else {
+          const parts = [inv.buyerName, inv.buyerAddress, inv.buyerCity].filter(Boolean).map(escapeHtml);
+          buyerBlock = parts.join("<br>");
+        }
 
         const createdDate = new Date(inv.createdAt || inv.saleDate || "").toLocaleDateString("de-DE");
-        const saleDate = escapeHtml(inv.saleDate || "");
 
-        const senderLineParts = [
-          firmName,
-          firmZipCity,
-          firmUstId ? ("USt-ID " + firmUstId) : "",
-          firmEmail
-        ].filter(Boolean);
-        const senderLine = escapeHtml(senderLineParts.join(" · "));
+        // Firmendaten in eine Zeile
+        const firmParts = [];
+        if (firmName) firmParts.push(firmName);
+        if (firmStreet) firmParts.push(firmStreet);
+        if (firmZipCity) firmParts.push(firmZipCity);
+        if (firmCountry) firmParts.push(firmCountry);
+        if (firmUstId) firmParts.push("USt-ID " + firmUstId);
+        if (firmEmail) firmParts.push(firmEmail);
+        const firmLine = firmParts.join(" · ");
+
+        // Positionen
+        let positions = [];
+        if (Array.isArray(inv.positions) && inv.positions.length) {
+          positions = inv.positions;
+        } else {
+          // Fallback: alte Einzelposition
+          const qty = Number(inv.quantity || 0) || 1;
+          const unitSale = revenue / qty;
+          positions = [{
+            articleName: inv.articleName || "",
+            articleNumber: inv.articleNumber || "",
+            quantity: qty,
+            unitSalePrice: unitSale,
+            lineTotal: revenue,
+            unitPurchasePrice: Number(inv.unitPurchasePrice || 0)
+          }];
+        }
+
+        const rowsHtml = positions.map(p => {
+          const qty = Number(p.quantity || 0);
+          const unitSale = Number(p.unitSalePrice || 0);
+          const lineTotal = typeof p.lineTotal === "number" ? p.lineTotal : qty * unitSale;
+          return `
+            <tr>
+              <td>${escapeHtml(p.articleName || "")}</td>
+              <td>${escapeHtml(p.articleNumber || "")}</td>
+              <td style="text-align:right;">${qty}</td>
+              <td style="text-align:right;">${unitSale.toFixed(2).replace(".", ",")}</td>
+              <td style="text-align:right;">${lineTotal.toFixed(2).replace(".", ",")}</td>
+            </tr>
+          `;
+        }).join("");
 
         win.document.write(`
           <html>
@@ -1519,56 +1680,41 @@
                   background:#ffffff;
                   color:#000000;
                 }
-                .pdf-toolbar{
+                .toolbar-print{
                   display:flex;
                   justify-content:flex-end;
                   gap:6mm;
                   margin-bottom:6mm;
                 }
-                .pdf-toolbar button{
-                  font-size:9pt;
-                  padding:3px 10px;
-                  border-radius:999px;
-                  border:1px solid #444;
-                  background:#f0f0f0;
-                  cursor:pointer;
+                .toolbar-print button{
+                  font-size:8pt;
+                  padding:2mm 5mm;
                 }
-                @media print{
-                  .pdf-toolbar{display:none;}
+                .from-line{
+                  font-size:8pt;
+                  border-bottom:1px solid #000;
+                  padding-bottom:2mm;
+                  margin-bottom:6mm;
                 }
-                .top-row{
+                .meta-row{
                   display:flex;
                   justify-content:space-between;
                   align-items:flex-start;
                   margin-bottom:10mm;
                 }
-                .sender-block{
-                  flex:1;
-                  font-size:8pt;
-                }
-                .sender-line{
-                  border-bottom:0.2mm solid #000;
-                  padding-bottom:1mm;
-                  margin-bottom:2mm;
-                  font-size:8.5pt;
-                }
-                .customer-block{
-                  margin-top:2mm;
-                  font-size:8.5pt;
+                .to-block{
+                  font-size:9pt;
+                  line-height:1.4;
+                  max-width:60%;
                 }
                 .meta-block{
                   font-size:10pt;
                   text-align:right;
                   line-height:1.5;
-                  min-width:55mm;
-                  margin-left:10mm;
-                }
-                .meta-block b{
-                  font-size:10.5pt;
                 }
                 h1{
                   font-size:18pt;
-                  margin:0 0 10mm;
+                  margin:0 0 8mm;
                 }
                 table{
                   width:100%;
@@ -1585,10 +1731,9 @@
                   background:#eeeeee;
                 }
                 .summary{
-                  margin-top:6mm;
+                  margin-top:8mm;
                   width:100%;
-                  font-size:9pt;
-                  clear:both;
+                  font-size:10pt;
                 }
                 .summary-inner{
                   float:right;
@@ -1602,44 +1747,47 @@
                   gap:6mm;
                 }
                 .text-small{
-                  font-size:8pt;
+                  font-size:9pt;
                   color:#333;
-                  margin-top:12mm;
-                }
-                .footer{
-                  font-size:7.5pt;
-                  color:#555;
-                  margin-top:10mm;
+                  margin-top:14mm;
                 }
                 .bottom-line{
-                  margin-top:12mm;
-                  border-top:0.2mm solid #000;
-                  height:20mm;
+                  border-top:1px solid #000;
+                  margin-top:18mm;
+                }
+                .footer{
+                  font-size:8pt;
+                  color:#555;
+                  margin-top:3mm;
                 }
                 .storno{
                   color:#c00;
                   font-weight:bold;
                   margin-top:2mm;
                 }
+                @media print{
+                  .toolbar-print{display:none;}
+                }
               </style>
             </head>
             <body>
-              <div class="pdf-toolbar">
-                <button onclick="window.close()">← Zurück</button>
-                <button onclick="window.print()">🖨️ Drucken / Speichern</button>
+              <div class="toolbar-print">
+                <button onclick="window.close()">Zurück</button>
+                <button onclick="window.print()">Drucken / Speichern</button>
               </div>
 
-              <div class="top-row">
-                <div class="sender-block">
-                  <div class="sender-line">${senderLine}</div>
-                  <div class="customer-block">
-                    ${buyerFullHtml}
-                  </div>
+              <div class="from-line">
+                ${firmLine}
+              </div>
+
+              <div class="meta-row">
+                <div class="to-block">
+                  ${buyerBlock}
                 </div>
                 <div class="meta-block">
                   <div><b>Rechnungsnummer:</b> ${inv.number || ""}</div>
                   <div><b>Rechnungsdatum:</b> ${createdDate}</div>
-                  <div><b>Verkaufsdatum:</b> ${saleDate}</div>
+                  <div><b>Verkaufsdatum:</b> ${escapeHtml(inv.saleDate || "")}</div>
                   ${inv.cancelled ? '<div class="storno">❌ STORNIERT</div>' : ""}
                 </div>
               </div>
@@ -1657,13 +1805,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td>${articleName}</td>
-                    <td>${articleNumber}</td>
-                    <td style="text-align:right;">${qty}</td>
-                    <td style="text-align:right;">${unitPrice.toFixed(2).replace(".", ",")}</td>
-                    <td style="text-align:right;">${revenue.toFixed(2).replace(".", ",")}</td>
-                  </tr>
+                  ${rowsHtml}
                 </tbody>
               </table>
 
@@ -1677,11 +1819,10 @@
                 ${paymentTextHtml}
               </div>
 
+              <div class="bottom-line"></div>
               <div class="footer">
                 ${footerTextHtml}
               </div>
-
-              <div class="bottom-line"></div>
 
               ${autoPrint ? "<script>window.print();<\/script>" : ""}
             </body>
@@ -1715,10 +1856,12 @@
 
       /* Helper */
       function getValue(id) {
-        return document.getElementById(id).value;
+        const el = document.getElementById(id);
+        return el ? el.value : "";
       }
       function setValue(id,v) {
-        document.getElementById(id).value = v ?? "";
+        const el = document.getElementById(id);
+        if (el) el.value = v ?? "";
       }
       function escapeHtml(str){
         return String(str ?? "")
