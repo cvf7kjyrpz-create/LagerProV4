@@ -1604,238 +1604,189 @@
 
       /* Rechnungsansicht / Drucken */
       function openInvoicePreview(inv, autoPrint) {
-        const win = window.open("", "_blank");
-        if (!win) return;
+  const win = window.open("", "_blank");
+  if (!win) return;
 
-        const revenue = Number(inv.salePrice || 0);
+  const revenue = Number(inv.salePrice || 0);
 
-        const firmName = escapeHtml(firmData.name || "");
-        const firmStreet = escapeHtml(firmData.street || "");
-        const firmZipCity = escapeHtml(firmData.zipCity || "");
-        const firmCountry = escapeHtml(firmData.country || "");
-        const firmUstId = escapeHtml(firmData.ustId || "");
-        const firmEmail = escapeHtml(firmData.email || "");
-        const paymentTextHtml = (firmData.paymentText || "").split("\n").map(ln => escapeHtml(ln)).join("<br>");
-        const footerTextHtml = escapeHtml(firmData.footerText || "");
+  const firmName = escapeHtml(firmData.name || "");
+  const firmStreet = escapeHtml(firmData.street || "");
+  const firmZipCity = escapeHtml(firmData.zipCity || "");
+  const firmCountry = escapeHtml(firmData.country || "");
+  const firmUstId = escapeHtml(firmData.ustId || "");
+  const firmEmail = escapeHtml(firmData.email || "");
+  const paymentTextHtml = (firmData.paymentText || "").split("\n").map(ln => escapeHtml(ln)).join("<br>");
+  const footerTextHtml = escapeHtml(firmData.footerText || "");
 
-        const buyerFull = inv.buyerFull || "";
-        let buyerBlock = "";
-        if (buyerFull) {
-          buyerBlock = buyerFull.split(/\r?\n/).map(ln => escapeHtml(ln)).join("<br>");
-        } else {
-          const parts = [inv.buyerName, inv.buyerAddress, inv.buyerCity].filter(Boolean).map(escapeHtml);
-          buyerBlock = parts.join("<br>");
-        }
+  // Käuferblock
+  const buyerBlock = (inv.buyerFull || "")
+    .split(/\r?\n/)
+    .map(ln => escapeHtml(ln))
+    .join("<br>");
 
-        const createdDate = new Date(inv.createdAt || inv.saleDate || "").toLocaleDateString("de-DE");
+  const createdDate = new Date(inv.createdAt || inv.saleDate || "").toLocaleDateString("de-DE");
 
-        // Firmendaten in eine Zeile
-        const firmParts = [];
-        if (firmName) firmParts.push(firmName);
-        if (firmStreet) firmParts.push(firmStreet);
-        if (firmZipCity) firmParts.push(firmZipCity);
-        if (firmCountry) firmParts.push(firmCountry);
-        if (firmUstId) firmParts.push("USt-ID " + firmUstId);
-        if (firmEmail) firmParts.push(firmEmail);
-        const firmLine = firmParts.join(" · ");
+  // Firmendaten EINZEILIG
+  const firmLine = [
+    firmName,
+    firmStreet,
+    firmZipCity,
+    firmCountry,
+    firmUstId ? "USt-ID " + firmUstId : "",
+    firmEmail
+  ]
+  .filter(Boolean)
+  .join(" · ");
 
-        // Positionen
-        let positions = [];
-        if (Array.isArray(inv.positions) && inv.positions.length) {
-          positions = inv.positions;
-        } else {
-          // Fallback: alte Einzelposition
-          const qty = Number(inv.quantity || 0) || 1;
-          const unitSale = revenue / qty;
-          positions = [{
-            articleName: inv.articleName || "",
-            articleNumber: inv.articleNumber || "",
-            quantity: qty,
-            unitSalePrice: unitSale,
-            lineTotal: revenue,
-            unitPurchasePrice: Number(inv.unitPurchasePrice || 0)
-          }];
-        }
+  // Positionen
+  let positions = Array.isArray(inv.positions) && inv.positions.length
+    ? inv.positions
+    : [{
+        articleName: inv.articleName || "",
+        articleNumber: inv.articleNumber || "",
+        quantity: Number(inv.quantity || 0) || 1,
+        unitSalePrice: revenue / (Number(inv.quantity || 1)),
+        lineTotal: revenue
+      }];
 
-        const rowsHtml = positions.map(p => {
-          const qty = Number(p.quantity || 0);
-          const unitSale = Number(p.unitSalePrice || 0);
-          const lineTotal = typeof p.lineTotal === "number" ? p.lineTotal : qty * unitSale;
-          return `
+  const rowsHtml = positions.map(p => `
+    <tr>
+      <td>${escapeHtml(p.articleName || "")}</td>
+      <td>${escapeHtml(p.articleNumber || "")}</td>
+      <td style="text-align:right;">${p.quantity}</td>
+      <td style="text-align:right;">${Number(p.unitSalePrice).toFixed(2).replace(".", ",")}</td>
+      <td style="text-align:right;">${Number(p.lineTotal).toFixed(2).replace(".", ",")}</td>
+    </tr>
+  `).join("");
+
+  win.document.write(`
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Rechnung ${inv.number}</title>
+        <style>
+          body {
+            font-family: system-ui, sans-serif;
+            font-size: 12pt;
+            padding: 20mm;
+            background: #fff;
+            color: #000;
+          }
+          .toolbar-print {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-bottom: 15px;
+          }
+          .toolbar-print button {
+            padding: 6px 12px;
+            font-size: 10pt;
+          }
+          .from-line {
+            border-bottom: 1px solid #000;
+            padding-bottom: 4mm;
+            margin-bottom: 10mm;
+            font-size: 10pt;
+          }
+          .meta-block {
+            margin-bottom: 15mm;
+            font-size: 12pt;
+          }
+          h1 {
+            font-size: 24pt;
+            margin: 0 0 12mm;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12mm;
+          }
+          th, td {
+            border: 1px solid #000;
+            padding: 6px 8px;
+          }
+          th {
+            background: #f0f0f0;
+          }
+          .text-small {
+            font-size: 11pt;
+            margin-top: 20mm;
+          }
+          .bottom-line {
+            border-top: 1px solid #000;
+            margin-top: 18mm;
+            padding-top: 2mm;
+          }
+          .footer {
+            font-size: 9pt;
+            color: #555;
+          }
+          @media print {
+            .toolbar-print {
+              display: none;
+            }
+          }
+        </style>
+      </head>
+      <body>
+
+        <div class="toolbar-print">
+          <button onclick="window.close()">Zurück</button>
+          <button onclick="window.print()">Drucken / Speichern</button>
+        </div>
+
+        <div class="from-line">
+          ${firmLine}
+        </div>
+
+        <div class="meta-block">
+          <b>Rechnungsnummer:</b> ${inv.number}<br>
+          <b>Rechnungsdatum:</b> ${createdDate}<br>
+          <b>Verkaufsdatum:</b> ${escapeHtml(inv.saleDate || "")}<br>
+        </div>
+
+        <div style="margin-bottom: 12mm; font-size: 12pt;">
+          <b>Kunde:</b><br>
+          ${buyerBlock}
+        </div>
+
+        <h1>RECHNUNG</h1>
+
+        <table>
+          <thead>
             <tr>
-              <td>${escapeHtml(p.articleName || "")}</td>
-              <td>${escapeHtml(p.articleNumber || "")}</td>
-              <td style="text-align:right;">${qty}</td>
-              <td style="text-align:right;">${unitSale.toFixed(2).replace(".", ",")}</td>
-              <td style="text-align:right;">${lineTotal.toFixed(2).replace(".", ",")}</td>
+              <th>Artikel</th>
+              <th>Art.-Nr.</th>
+              <th>Menge</th>
+              <th>Einzelpreis (€)</th>
+              <th>Gesamt (€)</th>
             </tr>
-          `;
-        }).join("");
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
 
-        win.document.write(`
-          <html>
-            <head>
-              <meta charset="UTF-8">
-              <title>Rechnung ${inv.number || ""}</title>
-              <style>
-                body{
-                  font-family:system-ui,sans-serif;
-                  font-size:10pt;
-                  padding:15mm;
-                  background:#ffffff;
-                  color:#000000;
-                }
-                .toolbar-print{
-                  display:flex;
-                  justify-content:flex-end;
-                  gap:6mm;
-                  margin-bottom:6mm;
-                }
-                .toolbar-print button{
-                  font-size:8pt;
-                  padding:2mm 5mm;
-                }
-                .from-line{
-                  font-size:8pt;
-                  border-bottom:1px solid #000;
-                  padding-bottom:2mm;
-                  margin-bottom:6mm;
-                }
-                .meta-row{
-                  display:flex;
-                  justify-content:space-between;
-                  align-items:flex-start;
-                  margin-bottom:10mm;
-                }
-                .to-block{
-                  font-size:9pt;
-                  line-height:1.4;
-                  max-width:60%;
-                }
-                .meta-block{
-                  font-size:10pt;
-                  text-align:right;
-                  line-height:1.5;
-                }
-                h1{
-                  font-size:18pt;
-                  margin:0 0 8mm;
-                }
-                table{
-                  width:100%;
-                  border-collapse:collapse;
-                  margin-top:4mm;
-                }
-                th,td{
-                  border:1px solid #000;
-                  padding:3px 5px;
-                  font-size:9pt;
-                  vertical-align:top;
-                }
-                th{
-                  background:#eeeeee;
-                }
-                .summary{
-                  margin-top:8mm;
-                  width:100%;
-                  font-size:10pt;
-                }
-                .summary-inner{
-                  float:right;
-                  border:1px solid #000;
-                  padding:4px 8px;
-                  min-width:45mm;
-                }
-                .summary-inner div{
-                  display:flex;
-                  justify-content:space-between;
-                  gap:6mm;
-                }
-                .text-small{
-                  font-size:9pt;
-                  color:#333;
-                  margin-top:14mm;
-                }
-                .bottom-line{
-                  border-top:1px solid #000;
-                  margin-top:18mm;
-                }
-                .footer{
-                  font-size:8pt;
-                  color:#555;
-                  margin-top:3mm;
-                }
-                .storno{
-                  color:#c00;
-                  font-weight:bold;
-                  margin-top:2mm;
-                }
-                @media print{
-                  .toolbar-print{display:none;}
-                }
-              </style>
-            </head>
-            <body>
-              <div class="toolbar-print">
-                <button onclick="window.close()">Zurück</button>
-                <button onclick="window.print()">Drucken / Speichern</button>
-              </div>
+        <div style="font-size: 14pt; text-align: right; margin-bottom: 20mm;">
+          <b>Rechnung gesamt:</b> ${revenue.toFixed(2).replace(".", ",")} €
+        </div>
 
-              <div class="from-line">
-                ${firmLine}
-              </div>
+        <div class="text-small">
+          ${paymentTextHtml}
+        </div>
 
-              <div class="meta-row">
-                <div class="to-block">
-                  ${buyerBlock}
-                </div>
-                <div class="meta-block">
-                  <div><b>Rechnungsnummer:</b> ${inv.number || ""}</div>
-                  <div><b>Rechnungsdatum:</b> ${createdDate}</div>
-                  <div><b>Verkaufsdatum:</b> ${escapeHtml(inv.saleDate || "")}</div>
-                  ${inv.cancelled ? '<div class="storno">❌ STORNIERT</div>' : ""}
-                </div>
-              </div>
+        <div class="bottom-line"></div>
+        <div class="footer">
+          ${footerTextHtml}
+        </div>
 
-              <h1>RECHNUNG</h1>
+        ${autoPrint ? "<script>window.print();<\/script>" : ""}
+      </body>
+    </html>
+  `);
 
-              <table>
-                <thead>
-                  <tr>
-                    <th>Artikel</th>
-                    <th>Art.-Nr.</th>
-                    <th>Menge</th>
-                    <th>Einzelpreis (€)</th>
-                    <th>Gesamt (€)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${rowsHtml}
-                </tbody>
-              </table>
-
-              <div class="summary">
-                <div class="summary-inner">
-                  <div><span>Rechnung gesamt:</span><span>${revenue.toFixed(2).replace(".", ",")} €</span></div>
-                </div>
-              </div>
-
-              <div class="text-small">
-                ${paymentTextHtml}
-              </div>
-
-              <div class="bottom-line"></div>
-              <div class="footer">
-                ${footerTextHtml}
-              </div>
-
-              ${autoPrint ? "<script>window.print();<\/script>" : ""}
-            </body>
-          </html>
-        `);
-        win.document.close();
-      }
-
+  win.document.close();
+}
       /* Backup JSON */
       function exportJson(obj) {
         const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
