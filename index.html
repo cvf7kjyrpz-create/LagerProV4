@@ -97,11 +97,7 @@
       color:var(--text-soft);
       font-size:0.78rem;
       cursor:pointer;
-      display:inline-flex;
-      align-items:center;
-      gap:0.3rem;
     }
-    .nav-btn span.icon{font-size:0.9rem;}
     .nav-btn.active{
       background:#f5f5f7;
       color:#050509;
@@ -301,6 +297,16 @@
     tbody tr.flagged{
       background:linear-gradient(90deg,rgba(46,204,113,0.11),rgba(14,17,25,1));
     }
+    tbody tr.cancelled{
+      background:#262a33 !important;
+      color:#8b8f9e;
+    }
+
+    .storno-label{
+      font-size:0.45rem;
+      color:#ff8b8b;
+      margin-top:0.1rem;
+    }
 
     .text-muted{color:var(--muted);}
 
@@ -428,12 +434,8 @@
 
       <!-- Navigation Lager / Rechnungen -->
       <div class="nav-bar">
-        <button class="nav-btn active" id="navLager">
-          <span class="icon">📦</span><span>Lager</span>
-        </button>
-        <button class="nav-btn" id="navRechnungen">
-          <span class="icon">💶</span><span>Rechnungen</span>
-        </button>
+        <button class="nav-btn active" id="navLager">Lager</button>
+        <button class="nav-btn" id="navRechnungen">Rechnungen</button>
       </div>
     </header>
 
@@ -503,13 +505,19 @@
 
     <!-- =============== RECHNUNGS-ANSICHT =============== -->
     <section id="view-rechnungen" style="display:none;">
+
+      <!-- Firmendaten-Button (oberhalb der Statistiken) -->
+      <div class="toolbar" style="margin-top:0.5rem;justify-content:flex-end;">
+        <button id="btnFirmSettings">⚙️ Firmendaten</button>
+      </div>
+
       <!-- Umsatz / Gewinn -->
       <div id="invoiceStats">
         <div class="invoice-chip">
-          Rechnungen gesamt: <b id="invoiceTotalRevenue">0,00 €</b>
+          Rechnung gesamt: <b id="invoiceTotalRevenue">0,00 €</b>
         </div>
         <div class="invoice-chip">
-          Gewinn / Verlust: <b id="invoiceTotalProfit">0,00 €</b>
+          Gewinn / Verlust (intern): <b id="invoiceTotalProfit">0,00 €</b>
         </div>
       </div>
 
@@ -534,7 +542,7 @@
                 <th>Kunde</th>
                 <th>Artikel</th>
                 <th>Menge</th>
-                <th>Rechnung gesamt (€)</th>
+                <th>Rechnung (€)</th>
                 <th>Gewinn/Verlust (€)</th>
                 <th>Plattform</th>
                 <th>Zahlung</th>
@@ -655,13 +663,8 @@
       </label>
 
       <label>
-        Verkaufspreis pro Stück (€)
-        <input id="invUnitPrice" type="number" step="0.01" min="0" value="0">
-      </label>
-
-      <label>
-        Versandkosten (€)
-        <input id="invShipping" type="number" step="0.01" min="0" value="0">
+        Verkaufspreis (gesamt, €)
+        <input id="invSalePrice" type="number" step="0.01" min="0" value="0">
       </label>
 
       <label>
@@ -685,13 +688,13 @@
       </label>
 
       <label>
-        Plattform (z.B. Vinted)
+        Plattform (z.B. eBay)
         <input id="invPlatform">
       </label>
 
       <label>
         Zahlungsart
-        <input id="invPaymentMethod" placeholder="z.B. Vinted, PayPal, Bar, Überweisung">
+        <input id="invPaymentMethod" placeholder="z.B. PayPal, Bar, Überweisung">
       </label>
 
       <div class="dialog-menu full-width">
@@ -701,17 +704,85 @@
     </form>
   </dialog>
 
+  <!-- Firmendaten-Dialog -->
+  <dialog id="firmDialog">
+    <h3 class="dialog-title">Firmendaten & Rechnungstext</h3>
+    <form id="firmForm" class="form-grid" onsubmit="return false;">
+      <label class="full-width">
+        Firmenname
+        <input id="firmName">
+      </label>
+
+      <label class="full-width">
+        Straße / Hausnummer
+        <input id="firmStreet">
+      </label>
+
+      <label>
+        PLZ / Ort
+        <input id="firmZipCity">
+      </label>
+
+      <label>
+        Land
+        <input id="firmCountry">
+      </label>
+
+      <label>
+        USt-ID
+        <input id="firmUstId">
+      </label>
+
+      <label class="full-width">
+        E-Mail
+        <input id="firmEmail">
+      </label>
+
+      <label class="full-width">
+        Rechnungstext (unter der Tabelle)
+        <textarea id="firmPaymentText" rows="4"></textarea>
+      </label>
+
+      <label class="full-width">
+        Fußzeile (ganz unten)
+        <textarea id="firmFooterText" rows="3"></textarea>
+      </label>
+
+      <div class="dialog-menu full-width">
+        <button type="button" id="btnCancelFirm">Abbrechen</button>
+        <button type="button" class="primary" id="btnSaveFirm">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       const ITEM_STORAGE_KEY = "lager-pro-v4-items";
       const INVOICE_STORAGE_KEY = "lager-pro-v4-invoices";
       const INVOICE_COUNTER_KEY = "lager-pro-v4-invoice-counter";
+      const FIRM_DATA_KEY = "lager-pro-v4-firmendaten";
 
       let items = [];
       let invoices = [];
       let currentItemId = null;
       let tempPhotoDataUrl = null;
       let currentInvoiceItemId = null;
+
+      let firmData = {
+        name:"OneByOneFashion",
+        street:"",
+        zipCity:"98683 Ilmenau",
+        country:"Deutschland",
+        ustId:"DE359019064",
+        email:"OneByOneFashion@myyahoo.com",
+        paymentText:
+          "Der Rechnungsbetrag wurde bereits über das System von Vinted beglichen.\n" +
+          "Es liegt aufgrund des Kleinunternehmerstatus nach § 19 UStG eine Umsatzsteuerbefreiung vor.\n" +
+          "Das Rechnungsdatum entspricht dem Lieferdatum.\n" +
+          "Wir bedanken uns für den Auftrag und die angenehme Zusammenarbeit.",
+        footerText:
+          "Es liegt aufgrund des Kleinunternehmerstatus nach § 19 UStG eine Umsatzsteuerbefreiung vor."
+      };
 
       const tbody = document.getElementById("tbody");
       const invoiceBody = document.getElementById("invoiceBody");
@@ -727,6 +798,9 @@
 
       const noteDialog = document.getElementById("noteDialog");
       const noteDialogText = document.getElementById("noteDialogText");
+
+      const firmDialog = document.getElementById("firmDialog");
+      const firmForm = document.getElementById("firmForm");
 
       const statCount = document.getElementById("statCount");
       const statQty = document.getElementById("statQty");
@@ -755,6 +829,9 @@
         viewRechnungen.style.display = "";
         renderInvoices(); // sicherstellen, dass Ansicht aktuell ist
       });
+
+      /* Firmendaten laden */
+      loadFirmData();
 
       /* Daten laden */
       loadItems();
@@ -916,8 +993,16 @@
               renderInvoices();
             }
             break;
+          case "cancel":
+            handleCancelInvoice(inv);
+            break;
         }
       });
+
+      /* Firmendaten-Button */
+      document.getElementById("btnFirmSettings").onclick = () => openFirmDialog();
+      document.getElementById("btnCancelFirm").onclick = () => firmDialog.close();
+      document.getElementById("btnSaveFirm").onclick = () => saveFirmDataFromForm();
 
       /* Dialog öffnen Artikel */
       function openItemDialog(id) {
@@ -1022,6 +1107,51 @@
         localStorage.setItem(INVOICE_STORAGE_KEY, JSON.stringify(invoices));
       }
 
+      /* Firmendaten laden/speichern */
+      function loadFirmData() {
+        try {
+          const raw = localStorage.getItem(FIRM_DATA_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            firmData = { ...firmData, ...parsed };
+          }
+        } catch (e) {
+          console.error("Fehler beim Laden der Firmendaten", e);
+        }
+      }
+
+      function saveFirmData() {
+        localStorage.setItem(FIRM_DATA_KEY, JSON.stringify(firmData));
+      }
+
+      function openFirmDialog() {
+        // Formular füllen
+        setValue("firmName", firmData.name || "");
+        setValue("firmStreet", firmData.street || "");
+        setValue("firmZipCity", firmData.zipCity || "");
+        setValue("firmCountry", firmData.country || "");
+        setValue("firmUstId", firmData.ustId || "");
+        setValue("firmEmail", firmData.email || "");
+        document.getElementById("firmPaymentText").value = firmData.paymentText || "";
+        document.getElementById("firmFooterText").value = firmData.footerText || "";
+
+        firmDialog.showModal();
+      }
+
+      function saveFirmDataFromForm() {
+        firmData.name = getValue("firmName").trim();
+        firmData.street = getValue("firmStreet").trim();
+        firmData.zipCity = getValue("firmZipCity").trim();
+        firmData.country = getValue("firmCountry").trim();
+        firmData.ustId = getValue("firmUstId").trim();
+        firmData.email = getValue("firmEmail").trim();
+        firmData.paymentText = document.getElementById("firmPaymentText").value.trim();
+        firmData.footerText = document.getElementById("firmFooterText").value.trim();
+
+        saveFirmData();
+        firmDialog.close();
+      }
+
       /* Rendering Lager */
       function render() {
         tbody.innerHTML = "";
@@ -1117,8 +1247,7 @@
         invoiceForm.reset();
         document.getElementById("invItemName").value = item.name || "";
         document.getElementById("invQuantity").value = 1;
-        document.getElementById("invUnitPrice").value = (item.price || 0).toFixed(2);
-        document.getElementById("invShipping").value = "0.00";
+        document.getElementById("invSalePrice").value = (item.price || 0).toFixed(2);
 
         const today = new Date().toISOString().slice(0,10);
         document.getElementById("invSaleDate").value = today;
@@ -1139,8 +1268,7 @@
         }
 
         const quantity = Math.max(1, Number(document.getElementById("invQuantity").value || 1));
-        const unitPrice = Number(document.getElementById("invUnitPrice").value || 0);
-        const shipping = Number(document.getElementById("invShipping").value || 0);
+        const salePrice = Number(document.getElementById("invSalePrice").value || 0);
         const saleDate = document.getElementById("invSaleDate").value || new Date().toISOString().slice(0,10);
         const buyerName = document.getElementById("invBuyerName").value.trim();
         const buyerAddress = document.getElementById("invBuyerAddress").value.trim();
@@ -1148,13 +1276,10 @@
         const platform = document.getElementById("invPlatform").value.trim();
         const paymentMethod = document.getElementById("invPaymentMethod").value.trim();
 
-        if (!unitPrice || unitPrice <= 0) {
-          alert("Bitte einen Verkaufspreis pro Stück eingeben.");
+        if (!salePrice || salePrice <= 0) {
+          alert("Bitte einen Verkaufspreis eingeben.");
           return;
         }
-
-        const lineTotal = unitPrice * quantity;
-        const invoiceTotal = lineTotal + (shipping > 0 ? shipping : 0);
 
         // Rechnungsnummer ermitteln
         let counter = 0;
@@ -1166,7 +1291,7 @@
 
         const purchasePrice = Number(item.price || 0);
         const cost = purchasePrice * quantity;
-        const profit = invoiceTotal - cost;
+        const profit = salePrice - cost;
 
         const invoice = {
           id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
@@ -1179,15 +1304,13 @@
           platform,
           paymentMethod,
           quantity,
-          unitPrice,
-          shipping,
-          lineTotal,
-          invoiceTotal,
+          salePrice,
           profit,
           articleId: item.id,
           articleName: item.name || "",
           articleNumber: item.articleNumber || "",
-          unitPurchasePrice: purchasePrice
+          unitPurchasePrice: purchasePrice,
+          cancelled: false
         };
 
         invoices.push(invoice);
@@ -1205,6 +1328,53 @@
         if (confirm("Rechnung wurde erstellt. Direkt anzeigen?")) {
           openInvoicePreview(invoice, false);
         }
+      }
+
+      /* Storno */
+      function handleCancelInvoice(inv) {
+        if (inv.cancelled) {
+          alert("Diese Rechnung ist bereits storniert.");
+          return;
+        }
+        if (!confirm("Diese Rechnung stornieren und den Lagerbestand zurückbuchen?")) {
+          return;
+        }
+
+        const qty = Number(inv.quantity || 0);
+        const unitPurchase = Number(inv.unitPurchasePrice || 0);
+
+        // Lager wieder auffüllen
+        let item = items.find(i => i.id === inv.articleId);
+        if (item) {
+          const currentQty = Number(item.quantity || 0);
+          item.quantity = currentQty + qty;
+        } else {
+          // Artikel existiert nicht mehr -> neu anlegen
+          item = {
+            id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+            articleNumber: inv.articleNumber || "",
+            purchaseDate: "",
+            name: inv.articleName || "",
+            condition: "",
+            size: "",
+            store: "",
+            quantity: qty,
+            price: unitPurchase,
+            note: "Automatisch durch Storno wieder angelegt",
+            flagged: false
+          };
+          items.push(item);
+        }
+
+        // Rechnung als storniert markieren
+        inv.cancelled = true;
+        // Gewinn/Verlust intern auf 0 setzen
+        inv.profit = 0;
+
+        saveItems();
+        saveInvoices();
+        render();
+        renderInvoices();
       }
 
       /* Rendering Rechnungen */
@@ -1238,15 +1408,22 @@
 
         for (const inv of filtered) {
           const tr = document.createElement("tr");
-          const total = Number(inv.invoiceTotal || 0);
+          if (inv.cancelled) tr.classList.add("cancelled");
+
+          const revenue = Number(inv.salePrice || 0);
           const profit = Number(inv.profit || 0);
+
+          const customerCell = inv.cancelled
+            ? `<div>${escapeHtml(inv.buyerName || "")}</div><div class="storno-label">❌ Storniert</div>`
+            : escapeHtml(inv.buyerName || "");
+
           tr.innerHTML = `
             <td>${inv.number || ""}</td>
             <td>${escapeHtml(inv.saleDate || "")}</td>
-            <td>${escapeHtml(inv.buyerName || "")}</td>
+            <td>${customerCell}</td>
             <td>${escapeHtml(inv.articleName || "")}</td>
             <td>${inv.quantity || 0}</td>
-            <td>${total.toFixed(2).replace(".", ",")}</td>
+            <td>${revenue.toFixed(2).replace(".", ",")}</td>
             <td>${profit.toFixed(2).replace(".", ",")}</td>
             <td>${escapeHtml(inv.platform || "")}</td>
             <td>${escapeHtml(inv.paymentMethod || "")}</td>
@@ -1254,6 +1431,7 @@
               <div class="actions-cell">
                 <button class="icon-btn" data-action="view" data-id="${inv.id}" title="Ansehen">🔍</button>
                 <button class="icon-btn" data-action="print" data-id="${inv.id}" title="Drucken / PDF">🖨️</button>
+                <button class="icon-btn" data-action="cancel" data-id="${inv.id}" title="Stornieren / Lager rückbuchen" ${inv.cancelled ? "disabled" : ""}>↩️</button>
                 <button class="icon-btn danger" data-action="delete" data-id="${inv.id}" title="Löschen">🗑️</button>
               </div>
             </td>
@@ -1265,8 +1443,11 @@
       }
 
       function updateInvoiceStats() {
-        const totalRevenue = invoices.reduce((sum, inv) => sum + Number(inv.invoiceTotal || 0), 0);
-        const totalProfit = invoices.reduce((sum, inv) => sum + Number(inv.profit || 0), 0);
+        // Stornierte Rechnungen werden NICHT mitgezählt
+        const activeInvoices = invoices.filter(inv => !inv.cancelled);
+
+        const totalRevenue = activeInvoices.reduce((sum, inv) => sum + Number(inv.salePrice || 0), 0);
+        const totalProfit = activeInvoices.reduce((sum, inv) => sum + Number(inv.profit || 0), 0);
         invoiceTotalRevenueEl.textContent = totalRevenue.toFixed(2).replace(".", ",") + " €";
         invoiceTotalProfitEl.textContent = totalProfit.toFixed(2).replace(".", ",") + " €";
       }
@@ -1276,16 +1457,25 @@
         const win = window.open("", "_blank");
         if (!win) return;
 
-        const quantity = Number(inv.quantity || 0);
-        const unitPrice = Number(inv.unitPrice || 0);
-        const shipping = Number(inv.shipping || 0);
-        const lineTotal = Number(inv.lineTotal || (quantity * unitPrice));
-        const invoiceTotal = Number(inv.invoiceTotal || (lineTotal + shipping));
-        const purchaseUnit = Number(inv.unitPurchasePrice || 0);
-        const cost = purchaseUnit * quantity;
+        const revenue = Number(inv.salePrice || 0);
+        const qty = Number(inv.quantity || 0);
 
-        const createdDate = inv.createdAt || inv.saleDate || "";
-        const createdStr = createdDate ? new Date(createdDate).toLocaleDateString("de-DE") : "";
+        const firmName = escapeHtml(firmData.name || "");
+        const firmStreet = escapeHtml(firmData.street || "");
+        const firmZipCity = escapeHtml(firmData.zipCity || "");
+        const firmCountry = escapeHtml(firmData.country || "");
+        const firmUstId = escapeHtml(firmData.ustId || "");
+        const firmEmail = escapeHtml(firmData.email || "");
+        const paymentTextHtml = (firmData.paymentText || "").split("\n").map(ln => escapeHtml(ln)).join("<br>");
+        const footerTextHtml = escapeHtml(firmData.footerText || "");
+
+        const buyerName = escapeHtml(inv.buyerName || "");
+        const buyerAddress = escapeHtml(inv.buyerAddress || "");
+        const buyerCity = escapeHtml(inv.buyerCity || "");
+        const articleName = escapeHtml(inv.articleName || "");
+        const articleNumber = escapeHtml(inv.articleNumber || "");
+
+        const createdDate = new Date(inv.createdAt || inv.saleDate || "").toLocaleDateString("de-DE");
 
         win.document.write(`
           <html>
@@ -1300,41 +1490,34 @@
                   background:#ffffff;
                   color:#000000;
                 }
-                .top-bar{
+                .top-row{
                   display:flex;
                   justify-content:space-between;
                   align-items:flex-start;
                   margin-bottom:10mm;
                 }
-                .address-block{
-                  font-size:9pt;
+                .from-block{
+                  font-size:8pt;
                   line-height:1.3;
                 }
-                .address-block + .address-block{
-                  margin-top:5mm;
-                }
-                .title-block{
+                .meta-block{
+                  font-size:8pt;
                   text-align:right;
-                  font-size:9pt;
-                }
-                .logo-text{
-                  font-weight:600;
-                  font-size:11pt;
-                  margin-bottom:2mm;
+                  line-height:1.4;
                 }
                 h1{
-                  font-size:18pt;
-                  margin:0 0 3mm;
-                  border-bottom:1px solid #000;
-                  padding-bottom:1mm;
+                  font-size:16pt;
+                  margin:0 0 4mm;
                 }
-                .meta-line{
-                  margin:1mm 0;
+                .to-block{
+                  margin-bottom:6mm;
+                  font-size:10pt;
+                  line-height:1.4;
                 }
                 table{
                   width:100%;
                   border-collapse:collapse;
-                  margin-top:3mm;
+                  margin-top:4mm;
                 }
                 th,td{
                   border:1px solid #000;
@@ -1346,77 +1529,71 @@
                   background:#eeeeee;
                 }
                 .summary{
-                  margin-top:6mm;
+                  margin-top:4mm;
                   width:100%;
-                  display:flex;
-                  justify-content:flex-end;
+                  font-size:9pt;
                 }
                 .summary-inner{
-                  font-size:9pt;
-                  min-width:60mm;
+                  float:right;
+                  border:1px solid #000;
+                  padding:4px 8px;
+                  min-width:45mm;
                 }
                 .summary-inner div{
                   display:flex;
                   justify-content:space-between;
-                  margin:1mm 0;
+                  gap:6mm;
                 }
-                .small{
+                .text-small{
                   font-size:8pt;
                   color:#333;
+                  margin-top:6mm;
                 }
                 .footer{
-                  margin-top:10mm;
-                  font-size:8pt;
-                  border-top:1px solid #000;
+                  font-size:7.5pt;
+                  color:#555;
+                  margin-top:8mm;
+                  border-top:1px solid #ccc;
                   padding-top:2mm;
                 }
-                .controls{
-                  display:flex;
-                  gap:5mm;
-                  margin-bottom:8mm;
-                }
-                .controls button{
-                  font-size:9pt;
-                  padding:3px 8px;
-                  border-radius:999px;
-                  border:1px solid #000;
-                  background:#f5f5f5;
-                  cursor:pointer;
+                .storno{
+                  color:#c00;
+                  font-weight:bold;
+                  margin-top:2mm;
                 }
               </style>
             </head>
             <body>
-              <div class="controls">
-                <button onclick="window.close()">Zurück zur App</button>
-                <button onclick="window.print()">Drucken / Speichern als PDF</button>
+              <div class="top-row">
+                <div class="from-block">
+                  <div>${firmName}</div>
+                  ${firmStreet ? `<div>${firmStreet}</div>` : ""}
+                  ${firmZipCity ? `<div>${firmZipCity}</div>` : ""}
+                  ${firmCountry ? `<div>${firmCountry}</div>` : ""}
+                  ${firmUstId ? `<div>USt-ID: ${firmUstId}</div>` : ""}
+                  ${firmEmail ? `<div>${firmEmail}</div>` : ""}
+                </div>
+                <div class="meta-block">
+                  <div><b>Rechnungsnummer:</b> ${inv.number || ""}</div>
+                  <div><b>Rechnungsdatum:</b> ${createdDate}</div>
+                  <div><b>Verkaufsdatum:</b> ${escapeHtml(inv.saleDate || "")}</div>
+                  ${inv.cancelled ? '<div class="storno">❌ STORNIERT</div>' : ""}
+                </div>
               </div>
 
-              <div class="top-bar">
-                <div>
-                  <div class="address-block">
-                    <div>OneByOneFashion</div>
-                    <div>98683 Ilmenau</div>
-                    <div>Deutschland</div>
-                  </div>
-                  <div class="address-block">
-                    <div>${escapeHtml(inv.buyerName || "")}</div>
-                    <div>${escapeHtml(inv.buyerAddress || "")}</div>
-                    <div>${escapeHtml(inv.buyerCity || "")}</div>
-                  </div>
-                </div>
-                <div class="title-block">
-                  <div class="logo-text">OneByOneFashion</div>
-                  <h1>RECHNUNG</h1>
-                  <div class="meta-line"><b>Rechnungsnummer:</b> ${inv.number || ""}</div>
-                  <div class="meta-line"><b>Rechnungsdatum:</b> ${createdStr}</div>
-                  <div class="meta-line"><b>Verkaufsdatum:</b> ${inv.saleDate || ""}</div>
-                </div>
+              <div class="to-block">
+                <div>${buyerName}</div>
+                ${buyerAddress ? `<div>${buyerAddress}</div>` : ""}
+                ${buyerCity ? `<div>${buyerCity}</div>` : ""}
               </div>
+
+              <h1>RECHNUNG</h1>
 
               <table>
                 <thead>
                   <tr>
                     <th>Artikel</th>
+                    <th>Art.-Nr.</th>
                     <th>Menge</th>
                     <th>Einzelpreis (€)</th>
                     <th>Gesamt (€)</th>
@@ -1424,41 +1601,27 @@
                 </thead>
                 <tbody>
                   <tr>
-                    <td>${escapeHtml(inv.articleName || "")}</td>
-                    <td style="text-align:right;">${quantity}</td>
-                    <td style="text-align:right;">${unitPrice.toFixed(2).replace(".", ",")}</td>
-                    <td style="text-align:right;">${lineTotal.toFixed(2).replace(".", ",")}</td>
+                    <td>${articleName}</td>
+                    <td>${articleNumber}</td>
+                    <td style="text-align:right;">${qty}</td>
+                    <td style="text-align:right;">${(revenue/Math.max(qty,1)).toFixed(2).replace(".", ",")}</td>
+                    <td style="text-align:right;">${revenue.toFixed(2).replace(".", ",")}</td>
                   </tr>
                 </tbody>
               </table>
 
               <div class="summary">
                 <div class="summary-inner">
-                  <div>
-                    <span>Zwischensumme:</span>
-                    <span>${lineTotal.toFixed(2).replace(".", ",")} €</span>
-                  </div>
-                  ${shipping > 0 ? `
-                  <div>
-                    <span>Versandkosten:</span>
-                    <span>${shipping.toFixed(2).replace(".", ",")} €</span>
-                  </div>` : ""}
-                  <div>
-                    <span><b>Rechnung gesamt:</b></span>
-                    <span><b>${invoiceTotal.toFixed(2).replace(".", ",")} €</b></span>
-                  </div>
+                  <div><span>Rechnung gesamt:</span><span>${revenue.toFixed(2).replace(".", ",")} €</span></div>
                 </div>
               </div>
 
-              <div class="small" style="margin-top:6mm;">
-                Der Rechnungsbetrag wurde bereits über das System von Vinted beglichen.<br>
-                Es liegt aufgrund des Kleinunternehmerstatus nach § 19 UStG eine Umsatzsteuerbefreiung vor.<br>
-                Das Rechnungsdatum entspricht dem Lieferdatum.<br>
-                Wir bedanken uns für den Auftrag und die angenehme Zusammenarbeit.
+              <div class="text-small">
+                ${paymentTextHtml}
               </div>
 
               <div class="footer">
-                USt-ID: DE359019064 – E-Mail: OneByOneFashion@myyahoo.com
+                ${footerTextHtml}
               </div>
 
               ${autoPrint ? "<script>window.print();<\/script>" : ""}
@@ -1499,10 +1662,11 @@
         document.getElementById(id).value = v ?? "";
       }
       function escapeHtml(str){
-        return String(str)
+        return String(str ?? "")
           .replace(/&/g,"&amp;")
           .replace(/</g,"&lt;")
-          .replace(/>/g,"&gt;");
+          .replace(/>/g,"&gt;")
+          .replace(/"/g,"&quot;");
       }
     });
   </script>
