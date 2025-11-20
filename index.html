@@ -1614,90 +1614,22 @@
 
       /* Rechnungsansicht / Drucken */
       function openInvoicePreview(inv, autoPrint) {
-  function showInvoicePhotos(inv) {
+
   const win = window.open("", "_blank");
   if (!win) return;
 
-  // Alle Bilder aus allen Positionen einsammeln
-  const photoList = [];
-
-  if (Array.isArray(inv.positions)) {
-    inv.positions.forEach(pos => {
-      const item = items.find(i => i.id === pos.itemId);
-      if (item && item.photoDataUrl) {
-        photoList.push({
-          name: item.name,
-          img: item.photoDataUrl
-        });
-      }
-    });
-  }
-
-  if (photoList.length === 0) {
-    win.document.write("<p style='font-family:sans-serif;padding:20px;'>Keine Fotos für diese Rechnung gefunden.</p>");
-    return;
-  }
-
-  win.document.write(`
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <title>Bilder zur Rechnung ${inv.number}</title>
-      <style>
-        body {
-          font-family: system-ui,sans-serif;
-          padding: 20px;
-        }
-        .imgbox {
-          margin-bottom: 20px;
-        }
-        img {
-          max-width: 95%;
-          height: auto;
-          border: 1px solid #666;
-          border-radius: 6px;
-        }
-        button {
-          margin-bottom: 15px;
-          padding: 6px 12px;
-          font-size: 10pt;
-        }
-      </style>
-    </head>
-    <body>
-      <button onclick="window.close()">Zurück</button>
-  `);
-
-  photoList.forEach(p => {
-    win.document.write(`
-      <div class="imgbox">
-        <h3>${p.name}</h3>
-        <a download="${p.name}.jpg" href="${p.img}">
-          <img src="${p.img}">
-        </a>
-        <p>Zum Speichern einfach aufs Bild tippen (iPhone: gedrückt halten → „In Fotos sichern“)</p>
-      </div>
-    `);
-  });
-
-  win.document.write(`</body></html>`);
-  win.document.close();
-}
-        const win = window.open("", "_blank");
-  if (!win) return;
-
+  // Werte vorbereiten
   const revenue = Number(inv.salePrice || 0);
 
   const firmName = escapeHtml(firmData.name || "");
   const firmStreet = escapeHtml(firmData.street || "");
   const firmZipCity = escapeHtml(firmData.zipCity || "");
   const firmCountry = escapeHtml(firmData.country || "");
-  const firmUstId = escapeHtml(firmData.ustId || "");
-  const firmEmail = escapeHtml(firmData.email || "");
   const paymentTextHtml = (firmData.paymentText || "").split("\n").map(ln => escapeHtml(ln)).join("<br>");
   const footerTextHtml = escapeHtml(firmData.footerText || "");
 
-  // Käuferblock
+  // ⛔️ USt-ID & Email ausgeblendet auf deinen Wunsch
+  // Käufer
   const buyerBlock = (inv.buyerFull || "")
     .split(/\r?\n/)
     .map(ln => escapeHtml(ln))
@@ -1705,19 +1637,15 @@
 
   const createdDate = new Date(inv.createdAt || inv.saleDate || "").toLocaleDateString("de-DE");
 
-  // Firmendaten EINZEILIG
+  // EINZEILIGE Firmenzeile ohne USt-ID & E-Mail
   const firmLine = [
     firmName,
     firmStreet,
     firmZipCity,
-    firmCountry,
-    firmUstId ? "USt-ID " + firmUstId : "",
-    firmEmail
-  ]
-  .filter(Boolean)
-  .join(" · ");
+    firmCountry
+  ].filter(Boolean).join(" · ");
 
-  // Positionen
+  // Positionen vorbereiten
   let positions = Array.isArray(inv.positions) && inv.positions.length
     ? inv.positions
     : [{
@@ -1738,6 +1666,7 @@
     </tr>
   `).join("");
 
+  // ===== PDF HTML =====
   win.document.write(`
     <html>
       <head>
@@ -1747,10 +1676,11 @@
           body {
             font-family: system-ui, sans-serif;
             font-size: 12pt;
-            padding: 20mm;
+            padding: 25mm;
             background: #fff;
             color: #000;
           }
+
           .toolbar-print {
             display: flex;
             justify-content: flex-end;
@@ -1761,45 +1691,68 @@
             padding: 6px 12px;
             font-size: 10pt;
           }
+
+          /* Firmenzeile oben */
           .from-line {
             border-bottom: 1px solid #000;
-            padding-bottom: 4mm;
-            margin-bottom: 10mm;
-            font-size: 10pt;
+            padding-bottom: 3mm;
+            margin-bottom: 12mm;
+            font-size: 11pt;
           }
+
+          /* Rechnungsmeta rechts oben */
           .meta-block {
-            margin-bottom: 15mm;
             font-size: 12pt;
+            line-height: 1.55;
+            margin-bottom: 18mm;
           }
+
           h1 {
-            font-size: 24pt;
-            margin: 0 0 12mm;
+            font-size: 28pt;
+            margin: 0 0 18mm;
+            letter-spacing: 1px;
           }
+
+          /* Tabelle */
           table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 12mm;
+            margin-bottom: 18mm;
           }
           th, td {
             border: 1px solid #000;
-            padding: 6px 8px;
+            padding: 7px 8px;
           }
           th {
-            background: #f0f0f0;
+            background: #f3f3f3;
           }
+
+          /* Rechnungssumme */
+          .sum-block {
+            font-size: 15pt;
+            text-align: right;
+            margin-bottom: 22mm;
+          }
+
+          /* Text */
           .text-small {
             font-size: 11pt;
-            margin-top: 20mm;
+            line-height: 1.5;
+            margin-bottom: 25mm;
           }
+
+          /* Unterste Linie */
           .bottom-line {
             border-top: 1px solid #000;
-            margin-top: 18mm;
+            margin-bottom: 2mm;
             padding-top: 2mm;
           }
+
           .footer {
             font-size: 9pt;
-            color: #555;
+            color: #444;
           }
+
           @media print {
             .toolbar-print {
               display: none;
@@ -1807,6 +1760,7 @@
           }
         </style>
       </head>
+
       <body>
 
         <div class="toolbar-print">
@@ -1814,9 +1768,7 @@
           <button onclick="window.print()">Drucken / Speichern</button>
         </div>
 
-        <div class="from-line">
-          ${firmLine}
-        </div>
+        <div class="from-line">${firmLine}</div>
 
         <div class="meta-block">
           <b>Rechnungsnummer:</b> ${inv.number}<br>
@@ -1824,7 +1776,7 @@
           <b>Verkaufsdatum:</b> ${escapeHtml(inv.saleDate || "")}<br>
         </div>
 
-        <div style="margin-bottom: 12mm; font-size: 12pt;">
+        <div style="font-size: 12pt; margin-bottom: 18mm;">
           <b>Kunde:</b><br>
           ${buyerBlock}
         </div>
@@ -1846,8 +1798,8 @@
           </tbody>
         </table>
 
-        <div style="font-size: 14pt; text-align: right; margin-bottom: 20mm;">
-          <b>Rechnung gesamt:</b> ${revenue.toFixed(2).replace(".", ",")} €
+        <div class="sum-block">
+          <b>Rechnung gesamt: ${revenue.toFixed(2).replace(".", ",")} €</b>
         </div>
 
         <div class="text-small">
@@ -1859,12 +1811,15 @@
           ${footerTextHtml}
         </div>
 
-        ${autoPrint ? "<script>window.print();<\/script>" : ""}
       </body>
     </html>
   `);
 
   win.document.close();
+
+  if (autoPrint) {
+    win.print();
+  }
 }
       /* Backup JSON */
       function exportJson(obj) {
