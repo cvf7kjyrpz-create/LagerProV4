@@ -1613,23 +1613,33 @@
       }
 
       /* Rechnungsansicht / Drucken */
-      function openInvoicePreview(inv, autoPrint) {
-
+      /* Rechnungsansicht / Drucken */
+function openInvoicePreview(inv, autoPrint) {
   const win = window.open("", "_blank");
   if (!win) return;
 
-  // Werte vorbereiten
   const revenue = Number(inv.salePrice || 0);
 
   const firmName = escapeHtml(firmData.name || "");
   const firmStreet = escapeHtml(firmData.street || "");
   const firmZipCity = escapeHtml(firmData.zipCity || "");
   const firmCountry = escapeHtml(firmData.country || "");
-  const paymentTextHtml = (firmData.paymentText || "").split("\n").map(ln => escapeHtml(ln)).join("<br>");
+  
+  // Untere Linie (ändern in App)
+  const firmMeta = [
+    firmData.email ? escapeHtml(firmData.email) : "",
+    firmData.ustId ? "USt-ID: " + escapeHtml(firmData.ustId) : "",
+    firmData.ceo ? "Geschäftsführer: " + escapeHtml(firmData.ceo) : ""
+  ].filter(Boolean).join(" · ");
+
+  const paymentTextHtml = (firmData.paymentText || "")
+    .split("\n")
+    .map(ln => escapeHtml(ln))
+    .join("<br>");
+
   const footerTextHtml = escapeHtml(firmData.footerText || "");
 
-  // ⛔️ USt-ID & Email ausgeblendet auf deinen Wunsch
-  // Käufer
+  // Käuferblock
   const buyerBlock = (inv.buyerFull || "")
     .split(/\r?\n/)
     .map(ln => escapeHtml(ln))
@@ -1637,15 +1647,7 @@
 
   const createdDate = new Date(inv.createdAt || inv.saleDate || "").toLocaleDateString("de-DE");
 
-  // EINZEILIGE Firmenzeile ohne USt-ID & E-Mail
-  const firmLine = [
-    firmName,
-    firmStreet,
-    firmZipCity,
-    firmCountry
-  ].filter(Boolean).join(" · ");
-
-  // Positionen vorbereiten
+  // Positionen (mit Zeilenumbruch beim Artikeltext)
   let positions = Array.isArray(inv.positions) && inv.positions.length
     ? inv.positions
     : [{
@@ -1656,170 +1658,164 @@
         lineTotal: revenue
       }];
 
-  const rowsHtml = positions.map(p => `
-    <tr>
-      <td>${escapeHtml(p.articleName || "")}</td>
-      <td>${escapeHtml(p.articleNumber || "")}</td>
-      <td style="text-align:right;">${p.quantity}</td>
-      <td style="text-align:right;">${Number(p.unitSalePrice).toFixed(2).replace(".", ",")}</td>
-      <td style="text-align:right;">${Number(p.lineTotal).toFixed(2).replace(".", ",")}</td>
-    </tr>
-  `).join("");
+  // Artikelname → 2 Zeilen bei langem Text
+  const rowsHtml = positions.map(p => {
+    const wrapped = escapeHtml(p.articleName || "").replace(/(.{38})/g, "$1<br>");
+    return `
+      <tr>
+        <td>${wrapped}</td>
+        <td>${escapeHtml(p.articleNumber || "")}</td>
+        <td style="text-align:right;">${p.quantity}</td>
+        <td style="text-align:right;">${Number(p.unitSalePrice).toFixed(2).replace(".", ",")}</td>
+        <td style="text-align:right;">${Number(p.lineTotal).toFixed(2).replace(".", ",")}</td>
+      </tr>
+    `;
+  }).join("");
 
-  // ===== PDF HTML =====
   win.document.write(`
-    <html>
-      <head>
-        <meta charset="UTF-8">
-        <title>Rechnung ${inv.number}</title>
-        <style>
-          body {
-            font-family: system-ui, sans-serif;
-            font-size: 12pt;
-            padding: 25mm;
-            background: #fff;
-            color: #000;
-          }
+  <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Rechnung ${inv.number}</title>
 
-          .toolbar-print {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            margin-bottom: 15px;
-          }
-          .toolbar-print button {
-            padding: 6px 12px;
-            font-size: 10pt;
-          }
+      <style>
+        body {
+          font-family: system-ui, sans-serif;
+          font-size: 11pt;
+          padding: 18mm;
+          background: #fff;
+          color: #000;
+        }
+        .toolbar-print {
+          display: flex;
+          justify-content: flex-end;
+          gap: 10px;
+          margin-bottom: 15px;
+        }
+        .toolbar-print button {
+          padding: 6px 12px;
+          font-size: 10pt;
+        }
+        .from-line {
+          font-size: 10pt;
+          border-bottom: 1px solid #000;
+          padding-bottom: 2mm;
+          margin-bottom: 1mm;
+        }
+        .customer-block {
+          margin-bottom: 10mm;
+          font-size: 11pt;
+        }
+        .meta-right {
+          float: right;
+          text-align: right;
+          font-size: 12pt;
+          margin-top: -22mm;
+        }
+        h1 {
+          font-size: 24pt;
+          margin: 10mm 0 6mm;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 10mm;
+        }
+        th, td {
+          border: 1px solid #000;
+          padding: 6px 8px;
+          vertical-align: top;
+        }
+        th {
+          background: #f0f0f0;
+        }
+        .sum-block {
+          text-align: right;
+          font-size: 14pt;
+          margin-bottom: 15mm;
+        }
+        .payment-text {
+          font-size: 10pt;
+          margin-bottom: 10mm;
+        }
+        .bottom-line {
+          border-top: 1px solid #000;
+          padding-top: 2mm;
+          margin-top: 15mm;
+        }
+        .footer {
+          font-size: 9pt;
+          color: #555;
+        }
+        @media print {
+          .toolbar-print { display:none; }
+        }
+      </style>
+    </head>
 
-          /* Firmenzeile oben */
-          .from-line {
-            border-bottom: 1px solid #000;
-            padding-bottom: 3mm;
-            margin-bottom: 12mm;
-            font-size: 11pt;
-          }
+    <body>
 
-          /* Rechnungsmeta rechts oben */
-          .meta-block {
-            font-size: 12pt;
-            line-height: 1.55;
-            margin-bottom: 18mm;
-          }
+      <div class="toolbar-print">
+        <button onclick="window.close()">Zurück</button>
+        <button onclick="window.print()">Drucken / Speichern</button>
+      </div>
 
-          h1 {
-            font-size: 28pt;
-            margin: 0 0 18mm;
-            letter-spacing: 1px;
-          }
+      <!-- Firmenadresse EINZEILIG -->
+      <div class="from-line">
+        ${firmName}, ${firmStreet}, ${firmZipCity}, ${firmCountry}
+      </div>
 
-          /* Tabelle */
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 18mm;
-          }
-          th, td {
-            border: 1px solid #000;
-            padding: 7px 8px;
-          }
-          th {
-            background: #f3f3f3;
-          }
+      <!-- Kundenadresse -->
+      <div class="customer-block">
+        ${buyerBlock}
+      </div>
 
-          /* Rechnungssumme */
-          .sum-block {
-            font-size: 15pt;
-            text-align: right;
-            margin-bottom: 22mm;
-          }
+      <!-- Rechte Seite: Nummernblock -->
+      <div class="meta-right">
+        <b>Rechnungsnr.:</b> ${inv.number}<br>
+        <b>Rechnungsdatum:</b> ${createdDate}<br>
+        <b>Lieferdatum:</b> ${escapeHtml(inv.saleDate || "")}<br>
+      </div>
 
-          /* Text */
-          .text-small {
-            font-size: 11pt;
-            line-height: 1.5;
-            margin-bottom: 25mm;
-          }
+      <h1>Rechnung</h1>
 
-          /* Unterste Linie */
-          .bottom-line {
-            border-top: 1px solid #000;
-            margin-bottom: 2mm;
-            padding-top: 2mm;
-          }
+      <p style="margin-bottom: 6mm;">Hiermit berechnen wir Ihnen folgende Lieferungen/Leistungen</p>
 
-          .footer {
-            font-size: 9pt;
-            color: #444;
-          }
+      <table>
+        <thead>
+          <tr>
+            <th>Bezeichnung</th>
+            <th>Art.-Nr.</th>
+            <th>Menge</th>
+            <th>Einzel €</th>
+            <th>Gesamt €</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
 
-          @media print {
-            .toolbar-print {
-              display: none;
-            }
-          }
-        </style>
-      </head>
+      <div class="sum-block">
+        <b>Rechnung gesamt:</b> ${revenue.toFixed(2).replace(".", ",")} €
+      </div>
 
-      <body>
+      <div class="payment-text">
+        ${paymentTextHtml}
+      </div>
 
-        <div class="toolbar-print">
-          <button onclick="window.close()">Zurück</button>
-          <button onclick="window.print()">Drucken / Speichern</button>
-        </div>
+      <div class="bottom-line"></div>
 
-        <div class="from-line">${firmLine}</div>
+      <div class="footer">
+        ${firmMeta}
+      </div>
 
-        <div class="meta-block">
-          <b>Rechnungsnummer:</b> ${inv.number}<br>
-          <b>Rechnungsdatum:</b> ${createdDate}<br>
-          <b>Verkaufsdatum:</b> ${escapeHtml(inv.saleDate || "")}<br>
-        </div>
-
-        <div style="font-size: 12pt; margin-bottom: 18mm;">
-          <b>Kunde:</b><br>
-          ${buyerBlock}
-        </div>
-
-        <h1>RECHNUNG</h1>
-
-        <table>
-          <thead>
-            <tr>
-              <th>Artikel</th>
-              <th>Art.-Nr.</th>
-              <th>Menge</th>
-              <th>Einzelpreis (€)</th>
-              <th>Gesamt (€)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml}
-          </tbody>
-        </table>
-
-        <div class="sum-block">
-          <b>Rechnung gesamt: ${revenue.toFixed(2).replace(".", ",")} €</b>
-        </div>
-
-        <div class="text-small">
-          ${paymentTextHtml}
-        </div>
-
-        <div class="bottom-line"></div>
-        <div class="footer">
-          ${footerTextHtml}
-        </div>
-
-      </body>
-    </html>
+      ${autoPrint ? "<script>window.print();<\/script>" : ""}
+    </body>
+  </html>
   `);
 
   win.document.close();
-
-  if (autoPrint) {
-    win.print();
-  }
 }
       /* Backup JSON */
       function exportJson(obj) {
