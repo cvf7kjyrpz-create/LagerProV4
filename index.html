@@ -1870,7 +1870,58 @@ function openInvoicePreview(inv, autoPrint) {
           .replace(/>/g,"&gt;")
           .replace(/"/g,"&quot;");
       }
-    });
+      /* =============== BACKUP BANNER =============== */
+function showBackupBanner() {
+  const b = document.getElementById("backupBanner");
+  b.style.display = "block";
+  setTimeout(() => b.style.display = "none", 2500);
+}
+
+/* =============== BACKUP GENERIEREN =============== */
+function createBackupFile() {
+  const itemsRaw = localStorage.getItem("lager-pro-v4-items");
+  const invoicesRaw = localStorage.getItem("lager-pro-v4-invoices");
+  const firmRaw = localStorage.getItem("lager-pro-v4-firmendaten");
+  const counterRaw = localStorage.getItem("lager-pro-v4-invoice-counter");
+
+  const backup = {
+    timestamp: new Date().toISOString(),
+    items: itemsRaw ? JSON.parse(itemsRaw) : [],
+    invoices: invoicesRaw ? JSON.parse(invoicesRaw) : [],
+    firmData: firmRaw ? JSON.parse(firmRaw) : {},
+    invoiceCounter: counterRaw ? Number(counterRaw) : 0
+  };
+
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {
+    type: "application/json"
+  });
+
+  const t = new Date();
+  const fileName =
+    `lagerpro-v4-backup-` +
+    `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}—` +
+    `${String(t.getHours()).padStart(2,"0")}-${String(t.getMinutes()).padStart(2,"0")}.json`;
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.click();
+
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+  showBackupBanner();
+}
+
+/* =============== AUTOMATISCH BEIM START =============== */
+window.addEventListener("load", () => {
+  createBackupFile();
+});
+
+/* =============== MANUELLES BACKUP =============== */
+document.getElementById("btnManualBackup").addEventListener("click", () => {
+  createBackupFile();
+});
   </script>
   <div id="backupBanner">Backup erfolgreich gespeichert</div>
 </body>
